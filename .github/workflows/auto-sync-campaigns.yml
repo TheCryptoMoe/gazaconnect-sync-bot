@@ -1,22 +1,26 @@
 name: Auto-Sync GazaConnect Campaigns
+
 on:
   schedule:
-    # Runs every 4 hours automatically
     - cron: '0 */4 * * *'
-  workflow_dispatch: # Allows manual trigger button
+  workflow_dispatch:
+
 jobs:
   sync:
     name: Sync Live Campaigns
     runs-on: ubuntu-latest
     timeout-minutes: 25
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Install Google Chrome & Dependencies
+
+      - name: Install Google Chrome
         run: |
           sudo apt-get update
           sudo apt-get install -y wget gnupg ca-certificates
@@ -24,9 +28,10 @@ jobs:
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/googlechrome-linux-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
+
       - name: Run GazaConnect Campaign Sync Bot
         env:
-          ADMIN_PASSCODE: ${{ secrets.ADMIN_PASSCODE }}
+          ADMIN_PASSCODE: ${{ secrets.ADMIN_PASSCODE || 'Ilovecats77' }}
           CHROME_BIN: /usr/bin/google-chrome
         run: |
           node sync_campaigns_bot.js
