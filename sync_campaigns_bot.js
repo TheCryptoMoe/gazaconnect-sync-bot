@@ -52,20 +52,23 @@ function findBrowserPath() {
   return null;
 }
 
-function fetchJson(url) {
-  return new Promise((resolve, reject) => {
-    https.get(url + '?t=' + Date.now(), res => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          reject(e);
+async function fetchJson(url) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url + '?t=' + Date.now(), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
       });
-    }).on('error', reject);
-  });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      if (attempt === 3) throw e;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+  throw new Error('Failed to fetch ' + url);
 }
 
 function publishToServer(data) {
@@ -98,7 +101,7 @@ function publishToServer(data) {
 async function scrapeCampaign(url, sendCmd) {
   await sendCmd('Page.navigate', { url });
 
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 4; i++) {
     await new Promise(r => setTimeout(r, 1200));
     const evalRes = await sendCmd('Runtime.evaluate', {
       expression: `(() => {
@@ -202,9 +205,8 @@ async function runSyncSession() {
     data = await fetchJson(LIVE_DATA_URL);
     console.log(`✅ Loaded ${data.members.length} families.`);
   } catch (err) {
-    console.warn(`\n⚠️ Could not reach live site (${err.message}). Using local data.json.`);
-    const localPath = path.join(__dirname, '..', 'data.json');
-    data = JSON.parse(fs.readFileSync(localPath, 'utf8'));
+    console.error(`\n❌ Could not fetch data.json from live server: ${err.message}`);
+    return;
   }
 
   // 2. Launch browser in isolated background profile
@@ -365,11 +367,11 @@ async function runSyncSession() {
     }
   }
 
-  // Automatic retry pass for any campaigns that faced Turnstile verification delays
-  if (retryQueue.length > 0) {
+  // Automatic retry pass only if 5 or fewer campaigns need checking
+  if (retryQueue.length > 0 && retryQueue.length <= 5) {
     console.log(`\n🔁 Retrying ${retryQueue.length} campaign(s) that encountered verification delays...`);
     await sendCmd('Page.navigate', { url: 'about:blank' });
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise(r => setTimeout(r, 2000));
 
     for (let rIdx = 0; rIdx < retryQueue.length; rIdx++) {
       const m = retryQueue[rIdx];
@@ -406,7 +408,7 @@ async function runSyncSession() {
       } catch (err) {
         console.log(`⚠️ Kept baseline $${oldRaised.toLocaleString()}`);
       }
-      await new Promise(r => setTimeout(r, 2500));
+      await new Promise(r => setTimeout(r, 1500));
     }
   }
 
